@@ -26,7 +26,7 @@ import isNumber from './utils/isNumber';
 import omit from './utils/omit';
 import detectElementResize from './utils/detectElementResize';
 
-const kEPS = 0.00001;
+const kEPS = 0.0000001;
 const K_GOOGLE_TILE_SIZE = 256;
 // real minZoom calculated here _getMinZoom
 const K_IDLE_TIMEOUT = 100;
