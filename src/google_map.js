@@ -3,27 +3,28 @@ import React, { Component } from 'react';
 import PropTypes from 'prop-types';
 import ReactDOM from 'react-dom';
 
-import shallowEqual from 'fbjs/lib/shallowEqual';
-
-import MarkerDispatcher from './marker_dispatcher';
-
+// helpers
 import GoogleMapMap from './google_map_map';
+import MarkerDispatcher from './marker_dispatcher';
 import GoogleMapMarkers from './google_map_markers';
 import GoogleMapMarkersPrerender from './google_map_markers_prerender';
+import { generateHeatmap, optionsHeatmap } from './google_heatmap';
 
-import googleMapLoader from './utils/loaders/google_map_loader';
-import detectBrowser from './utils/detect';
+// loaders
+import googleMapLoader from './loaders/google_map_loader';
 
+// utils
 import Geo from './utils/geo';
-import isArraysEqualEps from './utils/array_helper';
-
-import isPlainObject from './utils/is_plain_object';
-import pick from './utils/pick';
 import raf from './utils/raf';
-import log2 from './utils/math/log2';
-
-import isNumber from './utils/isNumber';
+import pick from './utils/pick';
 import omit from './utils/omit';
+import log2 from './utils/math/log2';
+import isEmpty from './utils/isEmpty';
+import isNumber from './utils/isNumber';
+import detectBrowser from './utils/detect';
+import shallowEqual from './utils/shallowEqual';
+import isPlainObject from './utils/isPlainObject';
+import isArraysEqualEps from './utils/isArraysEqualEps';
 import detectElementResize from './utils/detectElementResize';
 
 const kEPS = 0.0000001;
@@ -59,10 +60,10 @@ const _checkMinZoom = (zoom, minZoom) => {
     if (zoom < minZoom) {
       console.warn(
         'GoogleMap: ' + // eslint-disable-line
-          'minZoom option is less than recommended ' +
-          'minZoom option for your map sizes.\n' +
-          'overrided to value ' +
-          minZoom
+        'minZoom option is less than recommended ' +
+        'minZoom option for your map sizes.\n' +
+        'overrided to value ' +
+        minZoom
       );
     }
   }
@@ -72,6 +73,12 @@ const _checkMinZoom = (zoom, minZoom) => {
   }
   return minZoom;
 };
+
+const isFullScreen = () =>
+  document.fullscreen ||
+  document.webkitIsFullScreen ||
+  document.mozFullScreen ||
+  document.msFullscreenElement;
 
 export default class GoogleMap extends Component {
   static propTypes = {
@@ -125,7 +132,7 @@ export default class GoogleMap extends Component {
     distanceToMouse(pt, mousePos /* , markerProps */) {
       return Math.sqrt(
         (pt.x - mousePos.x) * (pt.x - mousePos.x) +
-          (pt.y - mousePos.y) * (pt.y - mousePos.y)
+        (pt.y - mousePos.y) * (pt.y - mousePos.y)
       );
     },
     hoverDistance: 30,
@@ -141,6 +148,8 @@ export default class GoogleMap extends Component {
       position: 'relative',
     },
     layerTypes: [],
+    heatmap: {},
+    heatmapLibrary: false,
   };
 
   static googleMapLoader = googleMapLoader; // eslint-disable-line
@@ -154,6 +163,7 @@ export default class GoogleMap extends Component {
     this.map_ = null;
     this.maps_ = null;
     this.prevBounds_ = null;
+    this.heatmap = null;
 
     this.layers_ = {};
 
@@ -184,31 +194,26 @@ export default class GoogleMap extends Component {
       if (this.props.apiKey) {
         console.warn(
           'GoogleMap: ' + // eslint-disable-line no-console
-            'apiKey is deprecated, use ' +
-            'bootstrapURLKeys={{key: YOUR_API_KEY}} instead.'
+          'apiKey is deprecated, use ' +
+          'bootstrapURLKeys={{key: YOUR_API_KEY}} instead.'
         );
       }
 
       if (this.props.onBoundsChange) {
         console.warn(
           'GoogleMap: ' + // eslint-disable-line no-console
-            'onBoundsChange is deprecated, use ' +
-            'onChange({center, zoom, bounds, ...other}) instead.'
+          'onBoundsChange is deprecated, use ' +
+          'onChange({center, zoom, bounds, ...other}) instead.'
         );
       }
 
-      if (
-        this.props.center === undefined &&
-        this.props.defaultCenter === undefined
-      ) {
+      if (isEmpty(this.props.center) && isEmpty(this.props.defaultCenter)) {
         console.warn(
           'GoogleMap: center or defaultCenter property must be defined' // eslint-disable-line no-console
         );
       }
 
-      if (
-        this.props.zoom === undefined && this.props.defaultZoom === undefined
-      ) {
+      if (isEmpty(this.props.zoom) && isEmpty(this.props.defaultZoom)) {
         console.warn(
           'GoogleMap: zoom or defaultZoom property must be defined' // eslint-disable-line no-console
         );
@@ -253,7 +258,7 @@ export default class GoogleMap extends Component {
       ...this.props.bootstrapURLKeys,
     };
 
-    this.props.googleMapLoader(bootstrapURLKeys); // we can start load immediatly
+    this.props.googleMapLoader(bootstrapURLKeys, this.props.heatmapLibrary); // we can start load immediatly
 
     setTimeout(
       () => {
@@ -276,17 +281,15 @@ export default class GoogleMap extends Component {
 
   componentWillReceiveProps(nextProps) {
     if (process.env.NODE_ENV !== 'production') {
-      if (this.props.defaultCenter !== nextProps.defaultCenter) {
+      if (!shallowEqual(this.props.defaultCenter, nextProps.defaultCenter)) {
         console.warn(
-          'GoogleMap: defaultCenter prop changed. ' + // eslint-disable-line
-            "You can't change default props."
+          "GoogleMap: defaultCenter prop changed. You can't change default props."
         );
       }
 
-      if (this.props.defaultZoom !== nextProps.defaultZoom) {
+      if (!shallowEqual(this.props.defaultZoom, nextProps.defaultZoom)) {
         console.warn(
-          'GoogleMap: defaultZoom prop changed. ' + // eslint-disable-line
-            "You can't change default props."
+          "GoogleMap: defaultZoom prop changed. You can't change default props."
         );
       }
     }
@@ -309,12 +312,12 @@ export default class GoogleMap extends Component {
         if (
           !currCenter ||
           Math.abs(nextPropsCenter.lat - currCenter.lat) +
-            Math.abs(nextPropsCenter.lng - currCenter.lng) >
-            kEPS
+          Math.abs(nextPropsCenter.lng - currCenter.lng) >
+          kEPS
         ) {
           if (
             Math.abs(nextPropsCenter.lat - centerLatLng.lat) +
-              Math.abs(nextPropsCenter.lng - centerLatLng.lng) >
+            Math.abs(nextPropsCenter.lng - centerLatLng.lng) >
             kEPS
           ) {
             this.map_.panTo({
@@ -325,26 +328,24 @@ export default class GoogleMap extends Component {
         }
       }
 
-      if (nextProps.zoom !== undefined) {
+      if (!isEmpty(nextProps.zoom)) {
         // if zoom chaged by user
         if (Math.abs(nextProps.zoom - this.props.zoom) > 0) {
           this.map_.setZoom(nextProps.zoom);
         }
       }
 
-      if (
-        this.props.draggable !== undefined && nextProps.draggable === undefined
-      ) {
+      if (!isEmpty(this.props.draggable) && isEmpty(nextProps.draggable)) {
         // reset to default
         this.map_.setOptions({ draggable: this.defaultDraggableOption_ });
-      } else if (this.props.draggable !== nextProps.draggable) {
+      } else if (!shallowEqual(this.props.draggable, nextProps.draggable)) {
         // also prevent this on window 'mousedown' event to prevent map move
         this.map_.setOptions({ draggable: nextProps.draggable });
       }
 
       // use shallowEqual to try avoid calling map._setOptions if only the ref changes
       if (
-        nextProps.options !== undefined &&
+        !isEmpty(nextProps.options) &&
         !shallowEqual(this.props.options, nextProps.options)
       ) {
         const mapPlainObjects = pick(this.maps_, isPlainObject);
@@ -355,17 +356,14 @@ export default class GoogleMap extends Component {
         options = omit(options, ['zoom', 'center', 'draggable']);
 
         if ('minZoom' in options) {
-          const minZoom = this._computeMinZoom(
-            options.minZoomOverride,
-            options.minZoom
-          );
+          const minZoom = this._computeMinZoom(options.minZoom);
           options.minZoom = _checkMinZoom(options.minZoom, minZoom);
         }
 
         this.map_.setOptions(options);
       }
 
-      if (nextProps.layerTypes !== this.props.layerTypes) {
+      if (!shallowEqual(nextProps.layerTypes, this.props.layerTypes)) {
         Object.keys(this.layers_).forEach(layerKey => {
           this.layers_[layerKey].setMap(null);
           delete this.layers_[layerKey];
@@ -386,7 +384,7 @@ export default class GoogleMap extends Component {
   componentDidUpdate(prevProps) {
     this.markersDispatcher_.emit('kON_CHANGE');
 
-    if (this.props.hoverDistance !== prevProps.hoverDistance) {
+    if (!shallowEqual(this.props.hoverDistance, prevProps.hoverDistance)) {
       this.markersDispatcher_.emit('kON_MOUSE_POSITION_CHANGE');
     }
   }
@@ -443,9 +441,9 @@ export default class GoogleMap extends Component {
     return DEFAULT_MIN_ZOOM;
   };
 
-  _computeMinZoom = (minZoomOverride, minZoom) => {
-    if (minZoomOverride) {
-      return minZoom || DEFAULT_MIN_ZOOM;
+  _computeMinZoom = minZoom => {
+    if (!isEmpty(minZoom)) {
+      return minZoom;
     }
     return this._getMinZoom();
   };
@@ -453,9 +451,12 @@ export default class GoogleMap extends Component {
   _mapDomResizeCallback = () => {
     this.resetSizeOnIdle_ = true;
     if (this.maps_) {
-      const originalCenter = this.map_.getCenter();
+      const originalCenter = this.props.center || this.props.defaultCenter;
+      const currentCenter = this.map_.getCenter();
       this.maps_.event.trigger(this.map_, 'resize');
-      this.map_.setCenter(originalCenter);
+      this.map_.setCenter(
+        this.props.resetBoundsOnResize ? originalCenter : currentCenter
+      );
     }
   };
 
@@ -490,7 +491,7 @@ export default class GoogleMap extends Component {
     };
 
     this.props
-      .googleMapLoader(bootstrapURLKeys)
+      .googleMapLoader(bootstrapURLKeys, this.props.heatmapLibrary)
       .then(maps => {
         if (!this.mounted_) {
           return;
@@ -502,6 +503,15 @@ export default class GoogleMap extends Component {
           zoom: this.props.zoom || this.props.defaultZoom,
           center: new maps.LatLng(centerLatLng.lat, centerLatLng.lng),
         };
+
+        // Start Heatmap
+        if (this.props.heatmap.positions) {
+          Object.assign(this, {
+            heatmap: generateHeatmap(maps, this.props.heatmap),
+          });
+          optionsHeatmap(this.heatmap, this.props.heatmap);
+        }
+        // End Heatmap
 
         // prevent to exapose full api
         // next props must be exposed (console.log(Object.keys(pick(maps, isPlainObject))))
@@ -520,14 +530,11 @@ export default class GoogleMap extends Component {
           : this.props.options;
         const defaultOptions = defaultOptions_(mapPlainObjects);
 
-        const draggableOptions = this.props.draggable !== undefined && {
+        const draggableOptions = !isEmpty(this.props.draggable) && {
           draggable: this.props.draggable,
         };
 
-        const minZoom = this._computeMinZoom(
-          options.minZoomOverride,
-          options.minZoom
-        );
+        const minZoom = this._computeMinZoom(options.minZoom);
         this.minZoom_ = minZoom;
 
         const preMapOptions = {
@@ -537,7 +544,7 @@ export default class GoogleMap extends Component {
           ...propsOptions,
         };
 
-        this.defaultDraggableOption_ = preMapOptions.draggable !== undefined
+        this.defaultDraggableOption_ = !isEmpty(preMapOptions.draggable)
           ? preMapOptions.draggable
           : this.defaultDraggableOption_;
 
@@ -639,6 +646,9 @@ export default class GoogleMap extends Component {
         this.overlay_ = overlay;
 
         overlay.setMap(map);
+        if (this.props.heatmap.positions) {
+          this.heatmap.setMap(map);
+        }
 
         maps.event.addListener(map, 'zoom_changed', () => {
           // recalc position at zoom start
@@ -675,7 +685,6 @@ export default class GoogleMap extends Component {
           if (this.resetSizeOnIdle_) {
             this._setViewSize();
             const currMinZoom = this._computeMinZoom(
-              this.props.options.minZoomOverride,
               this.props.options.minZoom
             );
 
@@ -692,19 +701,6 @@ export default class GoogleMap extends Component {
             this_._onZoomAnimationEnd();
           }
 
-          const div = overlay.div;
-          const overlayProjection = overlay.getProjection();
-          const bounds = map.getBounds();
-          const ne = bounds.getNorthEast();
-          const sw = bounds.getSouthWest();
-          const ptx = overlayProjection.fromLatLngToDivPixel(
-            new maps.LatLng(ne.lat(), sw.lng())
-          );
-          // need round for safari still can't find what need for firefox
-          const ptxRounded = detectBrowser().isSafari
-            ? { x: Math.round(ptx.x), y: Math.round(ptx.y) }
-            : { x: ptx.x, y: ptx.y };
-
           this_.updateCounter_++;
           this_._onBoundsChanged(map, maps);
 
@@ -717,8 +713,25 @@ export default class GoogleMap extends Component {
           this._onChildMouseMove();
 
           this_.dragTime_ = 0;
-          div.style.left = `${ptxRounded.x}px`;
-          div.style.top = `${ptxRounded.y}px`;
+
+          const div = overlay.div;
+          const overlayProjection = overlay.getProjection();
+          if (div && overlayProjection) {
+            const bounds = map.getBounds();
+            const ne = bounds.getNorthEast();
+            const sw = bounds.getSouthWest();
+            const ptx = overlayProjection.fromLatLngToDivPixel(
+              new maps.LatLng(ne.lat(), sw.lng())
+            );
+            // need round for safari still can't find what need for firefox
+            const ptxRounded = detectBrowser().isSafari
+              ? { x: Math.round(ptx.x), y: Math.round(ptx.y) }
+              : { x: ptx.x, y: ptx.y };
+
+            div.style.left = `${ptxRounded.x}px`;
+            div.style.top = `${ptxRounded.y}px`;
+          }
+
           if (this_.markersDispatcher_) {
             this_.markersDispatcher_.emit('kON_CHANGE');
             if (this_.fireMouseEventOnIdle_) {
@@ -757,6 +770,8 @@ export default class GoogleMap extends Component {
         });
       })
       .catch(e => {
+        // notify callback of load failure
+        this._onGoogleApiLoaded({ map: null, maps: null });
         console.error(e); // eslint-disable-line no-console
         throw e;
       });
@@ -770,10 +785,10 @@ export default class GoogleMap extends Component {
       ) {
         console.warn(
           'GoogleMap: ' + // eslint-disable-line
-            'Usage of internal api objects is dangerous ' +
-            'and can cause a lot of issues.\n' +
-            'To hide this warning add yesIWantToUseGoogleMapApiInternals={true} ' +
-            'to <GoogleMap instance'
+          'Usage of internal api objects is dangerous ' +
+          'and can cause a lot of issues.\n' +
+          'To hide this warning add yesIWantToUseGoogleMapApiInternals={true} ' +
+          'to <GoogleMap instance'
         );
       }
 
@@ -848,9 +863,12 @@ export default class GoogleMap extends Component {
 
   _setViewSize = () => {
     if (!this.mounted_) return;
-
-    const mapDom = ReactDOM.findDOMNode(this.googleMapDom_);
-    this.geoService_.setViewSize(mapDom.clientWidth, mapDom.clientHeight);
+    if (isFullScreen()) {
+      this.geoService_.setViewSize(window.innerWidth, window.innerHeight);
+    } else {
+      const mapDom = ReactDOM.findDOMNode(this.googleMapDom_);
+      this.geoService_.setViewSize(mapDom.clientWidth, mapDom.clientHeight);
+    }
     this._onBoundsChanged();
   };
 
@@ -942,9 +960,7 @@ export default class GoogleMap extends Component {
   _onMapMouseDownCapture = () => {
     if (detectBrowser().isChrome) {
       // to fix strange zoom in chrome
-      if (!this.mouse_) {
-        this.zoomControlClickTime_ = new Date().getTime();
-      }
+      this.zoomControlClickTime_ = new Date().getTime();
     }
   };
 
@@ -1030,13 +1046,13 @@ export default class GoogleMap extends Component {
 
               size: this.geoService_.hasSize()
                 ? {
-                    width: this.geoService_.getWidth(),
-                    height: this.geoService_.getHeight(),
-                  }
+                  width: this.geoService_.getWidth(),
+                  height: this.geoService_.getHeight(),
+                }
                 : {
-                    width: 0,
-                    height: 0,
-                  },
+                  width: 0,
+                  height: 0,
+                },
             });
           }
 
@@ -1053,17 +1069,17 @@ export default class GoogleMap extends Component {
   render() {
     const mapMarkerPrerender = !this.state.overlayCreated
       ? <GoogleMapMarkersPrerender
-          experimental={this.props.experimental}
-          onChildClick={this._onChildClick}
-          onChildMouseDown={this._onChildMouseDown}
-          onChildMouseEnter={this._onChildMouseEnter}
-          onChildMouseLeave={this._onChildMouseLeave}
-          geoService={this.geoService_}
-          projectFromLeftTop={false}
-          distanceToMouse={this.props.distanceToMouse}
-          getHoverDistance={this._getHoverDistance}
-          dispatcher={this.markersDispatcher_}
-        />
+        experimental={this.props.experimental}
+        onChildClick={this._onChildClick}
+        onChildMouseDown={this._onChildMouseDown}
+        onChildMouseEnter={this._onChildMouseEnter}
+        onChildMouseLeave={this._onChildMouseLeave}
+        geoService={this.geoService_}
+        projectFromLeftTop={false}
+        distanceToMouse={this.props.distanceToMouse}
+        getHoverDistance={this._getHoverDistance}
+        dispatcher={this.markersDispatcher_}
+      />
       : null;
 
     return (

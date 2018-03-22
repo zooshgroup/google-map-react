@@ -4,22 +4,26 @@
 
 // The idea was to not draw map children on hovers, but subscribe inside children on hover change
 // see ./markers/ReactiveMarker source
-
 import React from 'react';
-import compose from 'recompose/compose';
-import defaultProps from 'recompose/defaultProps';
-import withHandlers from 'recompose/withHandlers';
-import withState from 'recompose/withState';
-import withPropsOnChange from 'recompose/withPropsOnChange';
-import withProps from 'recompose/withProps';
+import {
+  compose,
+  defaultProps,
+  withHandlers,
+  withState,
+  withProps,
+  withPropsOnChange,
+} from 'recompose';
 import { createSelector } from 'reselect';
-import withStateSelector from './utils/withStateSelector';
-import ptInBounds from './utils/ptInBounds';
+
+import { susolvkaCoords, generateMarkers } from './data/fakeData';
+
 import GoogleMapReact from '../src';
 // import SimpleMarker from './markers/SimpleMarker';
 import ReactiveMarker from './markers/ReactiveMarker';
-import { susolvkaCoords, generateMarkers } from './data/fakeData';
+
+import ptInBounds from './utils/ptInBounds';
 import props2Stream from './utils/props2Stream';
+import withStateSelector from './utils/withStateSelector';
 
 export const gMap = (
   {
@@ -35,15 +39,18 @@ export const gMap = (
   }
 ) => (
   <GoogleMapReact
+    bootstrapURLKeys={{
+      key: 'AIzaSyC-BebC7ChnHPzxQm7DAHYFMCqR5H3Jlps',
+    }}
     style={style}
     options={options}
+    draggable={draggable}
     hoverDistance={hoverDistance}
-    center={center}
     zoom={zoom}
+    center={center}
     onChange={onChange}
     onChildMouseEnter={onChildMouseEnter}
     onChildMouseLeave={onChildMouseLeave}
-    draggable={draggable}
     experimental
   >
     {markers}

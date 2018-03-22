@@ -1,17 +1,23 @@
-import React, { PropTypes } from 'react';
-import compose from 'recompose/compose';
-import defaultProps from 'recompose/defaultProps';
-import withHandlers from 'recompose/withHandlers';
-import withState from 'recompose/withState';
-import withContext from 'recompose/withContext';
-import withProps from 'recompose/withProps';
-import withPropsOnChange from 'recompose/withPropsOnChange';
+import React from 'react';
+import PropTypes from 'prop-types';
+import {
+  compose,
+  defaultProps,
+  withHandlers,
+  withState,
+  withContext,
+  withProps,
+  withPropsOnChange,
+} from 'recompose';
 import { createSelector } from 'reselect';
-import ptInBounds from './utils/ptInBounds';
-import GoogleMapReact from '../src';
-import withStateSelector from './utils/withStateSelector';
-import SimpleMarker from './markers/SimpleMarker';
+
 import { londonCoords, generateMarkers } from './data/fakeData';
+
+import GoogleMapReact from '../src';
+import SimpleMarker from './markers/SimpleMarker';
+
+import ptInBounds from './utils/ptInBounds';
+import withStateSelector from './utils/withStateSelector';
 
 export const gMap = (
   {
@@ -27,20 +33,23 @@ export const gMap = (
   }
 ) => (
   <GoogleMapReact
-    draggable={draggable}
+    bootstrapURLKeys={{
+      key: 'AIzaSyC-BebC7ChnHPzxQm7DAHYFMCqR5H3Jlps',
+    }}
     style={style}
     options={options}
+    draggable={draggable}
     hoverDistance={hoverDistance}
-    center={center}
     zoom={zoom}
+    center={center}
+    onChange={onChange}
+    onChildMouseEnter={onChildMouseEnter}
+    onChildMouseLeave={onChildMouseLeave}
     layerTypes={
       zoom > 12
         ? []
         : zoom > 10 ? ['TrafficLayer'] : ['TrafficLayer', 'TransitLayer']
     }
-    onChange={onChange}
-    onChildMouseEnter={onChildMouseEnter}
-    onChildMouseLeave={onChildMouseLeave}
   >
     {markers}
   </GoogleMapReact>
