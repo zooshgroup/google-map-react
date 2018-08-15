@@ -4,7 +4,7 @@
 
 #### apiKey (string) (_Deprecated use bootstrapURLKeys_)
 
-Google maps api key. (Optional, but your map will be rate-limited with no key)
+Google maps api key.
 
 #### bootstrapURLKeys (object)
 
@@ -82,6 +82,7 @@ createMapOptions: function (maps) {
  <GoogleMap  options={createMapOptions} ... />
 ```
 See "Custom map options example" in Examples below for a further example.
+See full options at [Google Maps Javascript API docs](https://developers.google.com/maps/documentation/javascript/controls#ControlOptions)
 
 #### onClick (func)
 
@@ -136,6 +137,9 @@ When the user changes the map type (HYBRID, ROADMAP, SATELLITE, TERRAIN) this fi
 
 #### onGoogleApiLoaded (func)
 Directly access the maps API - *use at your own risk!*
+
+#### onTilesLoaded (func)
+This function is called when the visible tiles have finished loading.
 
 ```javascript
 <GoogleMap  onGoogleApiLoaded={({map, maps}) => console.log(map, maps)} />
@@ -237,13 +241,9 @@ Initially any map object has its top left corner at lat lng coordinates. It's up
 Example (centering the marker):
 
 ```javascript
-const MARKER_SIZE = 40;
 const greatPlaceStyle = {
   position: 'absolute',
-  width: MARKER_SIZE,
-  height: MARKER_SIZE,
-  left: -MARKER_SIZE / 2,
-  top: -MARKER_SIZE / 2
+  transform: 'translate(-50%, -50%)';
 }
 ```
 
@@ -351,24 +351,7 @@ For enabling heatmap layer, just add `heatmapLibrary={true}` and provide data fo
     zoom={zoom}
     center={center}
     heatmapLibrary={true}
-    heatmap={{
-      positions: [
-        {
-          lat: 60.714305,
-          lng: 47.051773,
-        },
-        ...
-      ],
-      options: {
-        radius: 20,
-        opacity: 0.7,
-        gradient: [
-          'rgba(0, 255, 255, 0)',
-          'rgba(0, 255, 255, 1)',
-          ...
-        ]
-      },
-    }}
+    heatmap={{data}}
   >
     {markers}
   </GoogleMapReact>
